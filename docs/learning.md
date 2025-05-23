@@ -19,3 +19,13 @@
 - **Learnings**: [e.g., Importance of clear documentation for users].
 - **Challenges**: [e.g., Any issues with Markdown or CLI testing].
 - **Ideas**: [e.g., How to improve CLI help text or README].
+## Day 6: Adding --type Flag
+- **What I Did**: Added `--type` flag to `scan` subcommand with validation.
+- **Learnings**: [e.g., How Cobra handles flag validation].
+- **Challenges**: [e.g., Any issues with flag setup or testing].
+- **Ideas**: [e.g., Other flags to add, like `--output` for results].
+## Week 1 Summary
+- **Achievements**: Built CLI with Cobra, added `scan` subcommand, integrated logrus for logging, and added `--type` flag.
+- **Challenges**: [e.g., Any Windows PATH issues, Cobra setup hurdles].
+- **Learnings**: [e.g., How Cobra organizes commands/flags, importance of structured logging].
+- **Next**: Implement port scanner for network targets and explore CVE lookup.
