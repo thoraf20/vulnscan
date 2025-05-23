@@ -14,3 +14,5 @@ go build -o vulnscan.exe ./cmd/vulnscan
 
 ./vulnscan.exe scan --target example.com
 
+## License
+### MIT License

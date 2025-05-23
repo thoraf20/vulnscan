@@ -3,6 +3,7 @@ package cmd
 import (
     "github.com/spf13/cobra"
     "github.com/thoraf20/vulnscan/internal/config"
+    "github.com/thoraf20/vulnscan/pkg/scanner"
 )
 
 var log = config.InitLogger()
@@ -23,7 +24,17 @@ var scanCmd = &cobra.Command{
             cmd.Usage()
             return
         }
-        log.Infof("Starting %s scan on %s...\n", scanType, target)
+        if scanType == "network" {
+            log.Infof("Starting network scan on %s...", target)
+            result := scanner.ScanTCPPort(target, 80) // Test port 80 (HTTP)
+            if result.Open {
+                log.Infof("Port %d is open on %s", result.Port, target)
+            } else {
+                log.Warnf("Port %d is closed or filtered on %s", result.Port, target)
+            }
+        } else {
+            log.Infof("Web scan on %s not implemented yet", target)
+        }
     },
 }
 
