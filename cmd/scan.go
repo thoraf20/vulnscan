@@ -53,8 +53,17 @@ var scanCmd = &cobra.Command{
                 }
             }
         } else {
-            log.Infof("Web scan on %s not implemented yet", target)
-        }
+          log.Infof("Starting web scan on %s...", target)
+          result := scanner.ScanWeb(target)
+          if result.Error == nil {
+              log.Infof("Web scan result for %s: %s", result.URL, result.Status)
+              for k, v := range result.Headers {
+                  log.Infof("Header: %s: %s", k, v)
+              }
+          } else {
+              log.Warnf("Web scan failed: %v", result.Error)
+          }
+      }
     },
 }
 
