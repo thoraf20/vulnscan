@@ -17,10 +17,17 @@ var scanCmd = &cobra.Command{
             cmd.Usage()
             return
         }
-        log.Infof("Starting scan on %s...\n", target)
+        scanType, err := cmd.Flags().GetString("type")
+        if err != nil || (scanType != "network" && scanType != "web") {
+            log.Error("Invalid scan type. Use 'network' or 'web'")
+            cmd.Usage()
+            return
+        }
+        log.Infof("Starting %s scan on %s...\n", scanType, target)
     },
 }
 
 func init() {
     rootCmd.AddCommand(scanCmd)
+    scanCmd.Flags().StringP("type", "y", "network", "Scan type (network, web)")
 }

@@ -14,3 +14,8 @@
 - **Learnings**: [e.g., How logrus improves debugging with timestamps].
 - **Challenges**: [e.g., Any issues with logrus setup or Windows paths].
 - **Ideas**: [e.g., Thoughts on adding log levels or file output].
+## Day 5: README and CLI Testing
+- **What I Did**: Wrote README with installation and usage instructions, tested CLI.
+- **Learnings**: [e.g., Importance of clear documentation for users].
+- **Challenges**: [e.g., Any issues with Markdown or CLI testing].
+- **Ideas**: [e.g., How to improve CLI help text or README].
