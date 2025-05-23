@@ -4,6 +4,8 @@ import (
     "github.com/spf13/cobra"
     "github.com/thoraf20/vulnscan/internal/config"
     "github.com/thoraf20/vulnscan/pkg/scanner"
+    "strconv"
+    "strings"
 )
 
 var log = config.InitLogger()
@@ -26,7 +28,22 @@ var scanCmd = &cobra.Command{
         }
         if scanType == "network" {
             log.Infof("Starting network scan on %s...", target)
-            ports := []int{22, 80, 443} // SSH, HTTP, HTTPS
+            portsStr, err := cmd.Flags().GetString("ports")
+            if err != nil {
+                log.Error("Invalid ports format")
+                cmd.Usage()
+                return
+            }
+            var ports []int
+            for _, p := range strings.Split(portsStr, ",") {
+                port, err := strconv.Atoi(strings.TrimSpace(p))
+                if err != nil || port < 1 || port > 65535 {
+                    log.Error("Invalid port range")
+                    cmd.Usage()
+                    return
+                }
+                ports = append(ports, port)
+            }
             results := scanner.ScanTCPPorts(target, ports)
             for _, result := range results {
                 if result.Open {
@@ -44,4 +61,5 @@ var scanCmd = &cobra.Command{
 func init() {
     rootCmd.AddCommand(scanCmd)
     scanCmd.Flags().StringP("type", "y", "network", "Scan type (network, web)")
+    scanCmd.Flags().StringP("ports", "p", "22,80,443", "Ports to scan (e.g., 22,80,443)")
 }
