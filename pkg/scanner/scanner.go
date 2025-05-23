@@ -3,8 +3,9 @@ package scanner
 import (
     "fmt"
     "net"
+    "sync"
     "time"
-    "github.com/sirupsen/logrus"
+"github.com/sirupsen/logrus"
 )
 
 type PortResult struct {
@@ -13,19 +14,33 @@ type PortResult struct {
     Error error
 }
 
-func ScanTCPPort(host string, port int) PortResult {
+func ScanTCPPorts(host string, ports []int) []PortResult {
     log := logrus.New()
     log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-    address := fmt.Sprintf("%s:%d", host, port)
-    conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-    result := PortResult{Port: port, Error: err}
-    if err == nil {
-        result.Open = true
-        conn.Close()
-        log.Infof("Port %d is open on %s", port, host)
-    } else {
-        log.Debugf("Port %d is closed or filtered on %s: %v", port, host, err)
+    var results []PortResult
+    var mu sync.Mutex
+    var wg sync.WaitGroup
+
+    for _, port := range ports {
+        wg.Add(1)
+        go func(p int) {
+            defer wg.Done()
+            address := fmt.Sprintf("%s:%d", host, p)
+            conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+            result := PortResult{Port: p, Error: err}
+            if err == nil {
+                result.Open = true
+                conn.Close()
+                log.Infof("Port %d is open on %s", p, host)
+            } else {
+                log.Debugf("Port %d is closed or filtered on %s: %v", p, host, err)
+            }
+            mu.Lock()
+            results = append(results, result)
+            mu.Unlock()
+        }(port)
     }
-    return result
+    wg.Wait()
+    return results
 }

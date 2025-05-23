@@ -26,11 +26,14 @@ var scanCmd = &cobra.Command{
         }
         if scanType == "network" {
             log.Infof("Starting network scan on %s...", target)
-            result := scanner.ScanTCPPort(target, 80) // Test port 80 (HTTP)
-            if result.Open {
-                log.Infof("Port %d is open on %s", result.Port, target)
-            } else {
-                log.Warnf("Port %d is closed or filtered on %s", result.Port, target)
+            ports := []int{22, 80, 443} // SSH, HTTP, HTTPS
+            results := scanner.ScanTCPPorts(target, ports)
+            for _, result := range results {
+                if result.Open {
+                    log.Infof("Port %d is open on %s", result.Port, target)
+                } else {
+                    log.Warnf("Port %d is closed or filtered on %s", result.Port, target)
+                }
             }
         } else {
             log.Infof("Web scan on %s not implemented yet", target)
