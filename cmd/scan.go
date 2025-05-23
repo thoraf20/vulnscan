@@ -1,9 +1,11 @@
 package cmd
 
 import (
-    "fmt"
     "github.com/spf13/cobra"
+    "github.com/thoraf20/vulnscan/internal/config"
 )
+
+var log = config.InitLogger()
 
 var scanCmd = &cobra.Command{
     Use:   "scan",
@@ -11,11 +13,11 @@ var scanCmd = &cobra.Command{
     Run: func(cmd *cobra.Command, args []string) {
         target, _ := cmd.Flags().GetString("target")
         if target == "" {
-            fmt.Println("Error: --target is required")
+            log.Error("Error: --target is required")
             cmd.Usage()
             return
         }
-        fmt.Printf("Starting scan on %s...\n", target)
+        log.Infof("Starting scan on %s...\n", target)
     },
 }
 
