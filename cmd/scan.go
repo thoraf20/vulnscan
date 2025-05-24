@@ -4,6 +4,7 @@ import (
     "github.com/spf13/cobra"
     "github.com/thoraf20/vulnscan/internal/config"
     "github.com/thoraf20/vulnscan/pkg/scanner"
+    "github.com/thoraf20/vulnscan/pkg/cve"
     "strconv"
     "strings"
 )
@@ -48,6 +49,12 @@ var scanCmd = &cobra.Command{
             for _, result := range results {
                 if result.Open {
                     log.Infof("Port %d is open on %s", result.Port, target)
+                    cveResults := cve.LookupCVE(result.Port)
+                    for _, cveResult := range cveResults {
+                        if cveResult.Error == nil && cveResult.CVEID != "" {
+                            log.Infof("CVE: %s - %s", cveResult.CVEID, cveResult.Description)
+                        }
+                    }
                 } else {
                     log.Warnf("Port %d is closed or filtered on %s", result.Port, target)
                 }
