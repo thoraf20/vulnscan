@@ -2,12 +2,14 @@ package cmd
 
 import (
     "encoding/json"
+    "github.com/gocarina/gocsv"
     "github.com/olekukonko/tablewriter"
     "github.com/spf13/cobra"
     "github.com/thoraf20/vulnscan/internal/config"
     "github.com/thoraf20/vulnscan/pkg/cve"
     "github.com/thoraf20/vulnscan/pkg/scanner"
     "os"
+    "path/filepath"
     "strconv"
     "strings"
 )
@@ -36,6 +38,12 @@ var scanCmd = &cobra.Command{
             cmd.Usage()
             return
         }
+        outputFile, err := cmd.Flags().GetString("output")
+        if err != nil {
+            log.Error("Invalid output file")
+            cmd.Usage()
+            return
+        }
 
         if scanType == "network" {
             log.Infof("Starting network scan on %s...", target)
@@ -57,40 +65,68 @@ var scanCmd = &cobra.Command{
             }
             results := scanner.ScanTCPPorts(target, ports)
             type networkOutput struct {
-                Port         int
-                Status       string
-                CVEs         []cve.CVEResult
+                Port    int    `csv:"Port"`
+                Status  string `csv:"Status"`
+                Service string `csv:"Service"`
+                CVEs    string `csv:"CVEs"`
             }
             var output []networkOutput
             for _, result := range results {
-                status := "closed"
+                cveStr := ""
                 if result.Open {
-                    status = "open"
+                    cveResults := cve.LookupCVE(result.Service)
+                    for _, c := range cveResults {
+                        if c.CVEID != "" {
+                            cveStr += c.CVEID + "; "
+                        }
+                    }
+                    cveStr = strings.TrimSuffix(cveStr, "; ")
                 }
-                cveResults := cve.LookupCVE(result.Port)
                 output = append(output, networkOutput{
-                    Port:   result.Port,
-                    Status: status,
-                    CVEs:   cveResults,
+                    Port:    result.Port,
+                    Status:  map[bool]string{true: "open", false: "closed"}[result.Open],
+                    Service: result.Service,
+                    CVEs:    cveStr,
                 })
+            }
+            if outputFile != "" {
+                ext := strings.ToLower(filepath.Ext(outputFile))
+                if ext == ".json" {
+                    jsonData, _ := json.MarshalIndent(output, "", "  ")
+                    if err := os.WriteFile(outputFile, jsonData, 0644); err != nil {
+                        log.Errorf("Failed to write JSON file: %v", err)
+                        return
+                    }
+                    log.Infof("Results saved to %s", outputFile)
+                } else if ext == ".csv" {
+                    file, err := os.Create(outputFile)
+                    if err != nil {
+                        log.Errorf("Failed to create CSV file: %v", err)
+                        return
+                    }
+                    defer file.Close()
+                    if err := gocsv.MarshalFile(&output, file); err != nil {
+                        log.Errorf("Failed to write CSV file: %v", err)
+                        return
+                    }
+                    log.Infof("Results saved to %s", outputFile)
+                } else {
+                    log.Error("Output file must be .json or .csv")
+                    return
+                }
             }
             if format == "json" {
                 jsonData, _ := json.MarshalIndent(output, "", "  ")
                 os.Stdout.Write(jsonData)
             } else {
                 table := tablewriter.NewWriter(os.Stdout)
-                table.Header([]string{"Port", "Status", "CVEs"})
+                table.Header([]string{"Port", "Status", "Service", "CVEs"})
                 for _, item := range output {
-                    cveStr := ""
-                    for _, c := range item.CVEs {
-                        if c.CVEID != "" {
-                            cveStr += c.CVEID + "; "
-                        }
-                    }
                     table.Append([]string{
                         strconv.Itoa(item.Port),
                         item.Status,
-                        strings.TrimSuffix(cveStr, "; "),
+                        item.Service,
+                        item.CVEs,
                     })
                 }
                 table.Render()
@@ -99,26 +135,56 @@ var scanCmd = &cobra.Command{
             log.Infof("Starting web scan on %s...", target)
             result := scanner.ScanWeb(target)
             type webOutput struct {
-                URL          string
-                Status       string
-                Headers      map[string]string
-                Vulnerabilities []string
+                URL          string `csv:"URL"`
+                Status       string `csv:"Status"`
+                Headers      string `csv:"Headers"`
+                Vulnerabilities string `csv:"Vulnerabilities"`
             }
+            headersStr := ""
+            for k, v := range result.Headers {
+                headersStr += k + ": " + v + "; "
+            }
+            headersStr = strings.TrimSuffix(headersStr, "; ")
             output := webOutput{
                 URL:          result.URL,
                 Status:       result.Status,
-                Headers:      result.Headers,
-                Vulnerabilities: result.Vulnerabilities,
+                Headers:      headersStr,
+                Vulnerabilities: strings.Join(result.Vulnerabilities, "; "),
+            }
+            if outputFile != "" {
+                ext := strings.ToLower(filepath.Ext(outputFile))
+                if ext == ".json" {
+                    jsonData, _ := json.MarshalIndent(output, "", "  ")
+                    if err := os.WriteFile(outputFile, jsonData, 0644); err != nil {
+                        log.Errorf("Failed to write JSON file: %v", err)
+                        return
+                    }
+                    log.Infof("Results saved to %s", outputFile)
+                } else if ext == ".csv" {
+                    file, err := os.Create(outputFile)
+                    if err != nil {
+                        log.Errorf("Failed to create CSV file: %v", err)
+                        return
+                    }
+                    defer file.Close()
+                    outputs := []webOutput{output}
+                    if err := gocsv.MarshalFile(&outputs, file); err != nil {
+                        log.Errorf("Failed to write CSV file: %v", err)
+                        return
+                    }
+                    log.Infof("Results saved to %s", outputFile)
+                } else {
+                    log.Error("Output file must be .json or .csv")
+                    return
+                }
             }
             if format == "json" {
                 jsonData, _ := json.MarshalIndent(output, "", "  ")
                 os.Stdout.Write(jsonData)
             } else {
                 table := tablewriter.NewWriter(os.Stdout)
-                // table.SetHeader(true)
-                table.Append([]string{"URL", "Status", "Vulnerabilities"})
-                vulnStr := strings.Join(result.Vulnerabilities, "; ")
-                table.Append([]string{result.URL, result.Status, vulnStr})
+                table.Header([]string{"URL", "Status", "Vulnerabilities"})
+                table.Append([]string{result.URL, result.Status, strings.Join(result.Vulnerabilities, "; ")})
                 table.Render()
                 if len(result.Headers) > 0 {
                     log.Info("Headers:")
@@ -139,27 +205,5 @@ func init() {
     scanCmd.Flags().StringP("type", "y", "network", "Scan type (network, web)")
     scanCmd.Flags().StringP("ports", "p", "22,80,443", "Ports to scan (e.g., 22,80,443)")
     scanCmd.Flags().StringP("format", "f", "table", "Output format (table, json)")
+    scanCmd.Flags().StringP("output", "o", "", "Output file (e.g., results.json or results.csv)")
 }
-
-// package cmd
-
-// import (
-//     "github.com/olekukonko/tablewriter"
-//     "github.com/spf13/cobra"
-//     "os"
-// )
-
-// var scanCmd = &cobra.Command{
-//     Use:   "scan",
-//     Short: "Test tablewriter",
-//     Run: func(cmd *cobra.Command, args []string) {
-//         table := tablewriter.NewWriter(os.Stdout)
-//         table.SetHeader([]string{"Test", "Value"})
-//         table.Append([]string{"Example", "OK"})
-//         table.Render()
-//     },
-// }
-
-// func init() {
-//     rootCmd.AddCommand(scanCmd)
-// }

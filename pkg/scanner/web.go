@@ -5,14 +5,15 @@ import (
     "time"
     "github.com/sirupsen/logrus"
     "strings"
+    "net/url"
 )
 
 type WebResult struct {
-    URL       string
-    Status    string
-    Headers   map[string]string
+    URL             string
+    Status          string
+    Headers         map[string]string
     Vulnerabilities []string
-    Error     error
+    Error           error
 }
 
 func ScanWeb(target string) WebResult {
@@ -35,8 +36,10 @@ func ScanWeb(target string) WebResult {
             }
         }
         resp.Body.Close()
-        if _, exists := result.Headers["Strict-Transport-Security"]; !exists && strings.HasPrefix(target, "https:/") {
-            result.Vulnerabilities = append(result.Vulnerabilities, "Missing HSTS header (Strict-Transport-Security")
+
+        // Check insecure headers
+        if _, exists := result.Headers["Strict-Transport-Security"]; !exists && strings.HasPrefix(target, "https://") {
+            result.Vulnerabilities = append(result.Vulnerabilities, "Missing HSTS header (Strict-Transport-Security)")
         }
         if _, exists := result.Headers["X-Frame-Options"]; !exists {
             result.Vulnerabilities = append(result.Vulnerabilities, "Missing X-Frame-Options header (clickjacking risk)")
@@ -47,6 +50,11 @@ func ScanWeb(target string) WebResult {
         if server, exists := result.Headers["Server"]; exists {
             result.Vulnerabilities = append(result.Vulnerabilities, "Server header exposed: "+server)
         }
+
+        // Probe for XSS and SQLi
+        result.Vulnerabilities = append(result.Vulnerabilities, probeXSS(target, client, log)...)
+        result.Vulnerabilities = append(result.Vulnerabilities, probeSQLi(target, client, log)...)
+
         log.Infof("Web scan on %s: %s", target, result.Status)
         for _, vuln := range result.Vulnerabilities {
             log.Warnf("Vulnerability: %s", vuln)
@@ -55,4 +63,70 @@ func ScanWeb(target string) WebResult {
         log.Warnf("Web scan failed on %s: %v", target, err)
     }
     return result
+}
+
+func probeXSS(target string, client *http.Client, log *logrus.Logger) []string {
+    payloads := []string{
+        "<script>alert('xss')</script>",
+        "\"><script>alert('xss')</script>",
+    }
+    var vulnerabilities []string
+    for _, payload := range payloads {
+        u, err := url.Parse(target)
+        if err != nil {
+            log.Warnf("Invalid URL for XSS probe: %v", err)
+            continue
+        }
+        q := u.Query()
+        q.Add("q", payload)
+        u.RawQuery = q.Encode()
+        resp, err := client.Get(u.String())
+        if err != nil {
+            log.Warnf("XSS probe failed: %v", err)
+            continue
+        }
+        defer resp.Body.Close()
+        if resp.StatusCode == 200 {
+            buf := make([]byte, 1024)
+            n, _ := resp.Body.Read(buf)
+            body := string(buf[:n])
+            if strings.Contains(body, payload) {
+                vulnerabilities = append(vulnerabilities, "Potential XSS vulnerability: payload reflected - "+payload)
+            }
+        }
+    }
+    return vulnerabilities
+}
+
+func probeSQLi(target string, client *http.Client, log *logrus.Logger) []string {
+    payloads := []string{
+        "' OR '1'='1",
+        "1; DROP TABLE users --",
+    }
+    var vulnerabilities []string
+    for _, payload := range payloads {
+        u, err := url.Parse(target)
+        if err != nil {
+            log.Warnf("Invalid URL for SQLi probe: %v", err)
+            continue
+        }
+        q := u.Query()
+        q.Add("id", payload)
+        u.RawQuery = q.Encode()
+        resp, err := client.Get(u.String())
+        if err != nil {
+            log.Warnf("SQLi probe failed: %v", err)
+            continue
+        }
+        defer resp.Body.Close()
+        if resp.StatusCode == 200 {
+            buf := make([]byte, 1024)
+            n, _ := resp.Body.Read(buf)
+            body := string(buf[:n])
+            if strings.Contains(strings.ToLower(body), "sql") || strings.Contains(strings.ToLower(body), "error") {
+                vulnerabilities = append(vulnerabilities, "Potential SQL injection vulnerability: error detected - "+payload)
+            }
+        }
+    }
+    return vulnerabilities
 }

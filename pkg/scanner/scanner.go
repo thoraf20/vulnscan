@@ -3,44 +3,69 @@ package scanner
 import (
     "fmt"
     "net"
-    "sync"
     "time"
-"github.com/sirupsen/logrus"
+    "github.com/sirupsen/logrus"
+    "strings"
 )
 
 type PortResult struct {
-    Port  int
-    Open  bool
-    Error error
+    Port   int
+    Open   bool
+    Service string
 }
 
-func ScanTCPPorts(host string, ports []int) []PortResult {
+func ScanTCPPorts(target string, ports []int) []PortResult {
     log := logrus.New()
     log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-    var results []PortResult
-    var mu sync.Mutex
-    var wg sync.WaitGroup
-
+    results := make([]PortResult, 0, len(ports))
     for _, port := range ports {
-        wg.Add(1)
-        go func(p int) {
-            defer wg.Done()
-            address := fmt.Sprintf("%s:%d", host, p)
-            conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-            result := PortResult{Port: p, Error: err}
+        addr := net.JoinHostPort(target, fmt.Sprintf("%d", port))
+        conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+        result := PortResult{Port: port}
+        if err == nil {
+            result.Open = true
+            // Attempt banner grabbing
+            conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+            buffer := make([]byte, 1024)
+            n, err := conn.Read(buffer)
             if err == nil {
-                result.Open = true
-                conn.Close()
-                log.Infof("Port %d is open on %s", p, host)
+                banner := string(buffer[:n])
+                result.Service = detectService(banner, port)
             } else {
-                log.Debugf("Port %d is closed or filtered on %s: %v", p, host, err)
+                result.Service = defaultService(port)
             }
-            mu.Lock()
-            results = append(results, result)
-            mu.Unlock()
-        }(port)
+            conn.Close()
+            log.Infof("Port %d is open on %s (service: %s)", port, target, result.Service)
+        } else {
+            log.Warnf("Port %d is closed or filtered on %s", port, target)
+        }
+        results = append(results, result)
     }
-    wg.Wait()
     return results
+}
+
+func detectService(banner string, port int) string {
+    banner = strings.ToLower(banner)
+    if strings.Contains(banner, "ssh") {
+        return "ssh"
+    } else if strings.Contains(banner, "http") || strings.Contains(banner, "html") {
+        return "http"
+    } else if strings.Contains(banner, "tls") || strings.Contains(banner, "ssl") {
+        return "https"
+    }
+    return defaultService(port)
+}
+
+func defaultService(port int) string {
+    switch port {
+    case 22:
+        return "ssh"
+    case 80:
+        return "http"
+    case 443:
+        return "https"
+    default:
+        return "unknown"
+    }
 }

@@ -13,23 +13,15 @@ type CVEResult struct {
     Error       error
 }
 
-func LookupCVE(port int) []CVEResult {
+func LookupCVE(service string) []CVEResult {
     log := logrus.New()
     log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-    // Map common ports to services (simplified)
-    serviceMap := map[int]string{
-        22:  "ssh",
-        80:  "http",
-        443: "https",
-    }
-    service, ok := serviceMap[port]
-    if !ok {
-        log.Warnf("No CVE lookup for port %d", port)
+    if service == "unknown" {
+        log.Warnf("No CVE lookup for unknown service")
         return []CVEResult{{Error: nil}}
     }
 
-    // Query NVD API (no API key for basic usage)
     url := "https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=" + service
     client := &http.Client{Timeout: 10 * time.Second}
     resp, err := client.Get(url)
@@ -39,7 +31,6 @@ func LookupCVE(port int) []CVEResult {
     }
     defer resp.Body.Close()
 
-    // Parse response
     type nvdResponse struct {
         Vulnerabilities []struct {
             CVE struct {

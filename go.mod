@@ -3,6 +3,7 @@ module github.com/thoraf20/vulnscan
 go 1.24.2
 
 require (
+	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 	github.com/olekukonko/tablewriter v1.0.6
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
