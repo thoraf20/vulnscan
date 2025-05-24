@@ -65,8 +65,11 @@ var scanCmd = &cobra.Command{
           if result.Error == nil {
               log.Infof("Web scan result for %s: %s", result.URL, result.Status)
               for k, v := range result.Headers {
-                  log.Infof("Header: %s: %s", k, v)
+                log.Infof("Header: %s: %s", k, v)
               }
+              for _, vuln := range result.Vulnerabilities {
+                log.Warnf("Vulnerability: %s", vuln)
+             }
           } else {
               log.Warnf("Web scan failed: %v", result.Error)
           }
