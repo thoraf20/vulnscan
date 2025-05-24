@@ -1,10 +1,13 @@
 package cmd
 
 import (
+    "encoding/json"
+    "github.com/olekukonko/tablewriter"
     "github.com/spf13/cobra"
     "github.com/thoraf20/vulnscan/internal/config"
-    "github.com/thoraf20/vulnscan/pkg/scanner"
     "github.com/thoraf20/vulnscan/pkg/cve"
+    "github.com/thoraf20/vulnscan/pkg/scanner"
+    "os"
     "strconv"
     "strings"
 )
@@ -15,9 +18,9 @@ var scanCmd = &cobra.Command{
     Use:   "scan",
     Short: "Scan a target for vulnerabilities",
     Run: func(cmd *cobra.Command, args []string) {
-        target, _ := cmd.Flags().GetString("target")
-        if target == "" {
-            log.Error("Error: --target is required")
+        target, err := cmd.Flags().GetString("target")
+        if err != nil || target == "" {
+            log.Error("Target is required")
             cmd.Usage()
             return
         }
@@ -27,6 +30,13 @@ var scanCmd = &cobra.Command{
             cmd.Usage()
             return
         }
+        format, err := cmd.Flags().GetString("format")
+        if err != nil || (format != "table" && format != "json") {
+            log.Error("Invalid format. Use 'table' or 'json'")
+            cmd.Usage()
+            return
+        }
+
         if scanType == "network" {
             log.Infof("Starting network scan on %s...", target)
             portsStr, err := cmd.Flags().GetString("ports")
@@ -46,34 +56,81 @@ var scanCmd = &cobra.Command{
                 ports = append(ports, port)
             }
             results := scanner.ScanTCPPorts(target, ports)
+            type networkOutput struct {
+                Port         int
+                Status       string
+                CVEs         []cve.CVEResult
+            }
+            var output []networkOutput
             for _, result := range results {
+                status := "closed"
                 if result.Open {
-                    log.Infof("Port %d is open on %s", result.Port, target)
-                    cveResults := cve.LookupCVE(result.Port)
-                    for _, cveResult := range cveResults {
-                        if cveResult.Error == nil && cveResult.CVEID != "" {
-                            log.Infof("CVE: %s - %s", cveResult.CVEID, cveResult.Description)
+                    status = "open"
+                }
+                cveResults := cve.LookupCVE(result.Port)
+                output = append(output, networkOutput{
+                    Port:   result.Port,
+                    Status: status,
+                    CVEs:   cveResults,
+                })
+            }
+            if format == "json" {
+                jsonData, _ := json.MarshalIndent(output, "", "  ")
+                os.Stdout.Write(jsonData)
+            } else {
+                table := tablewriter.NewWriter(os.Stdout)
+                table.Header([]string{"Port", "Status", "CVEs"})
+                for _, item := range output {
+                    cveStr := ""
+                    for _, c := range item.CVEs {
+                        if c.CVEID != "" {
+                            cveStr += c.CVEID + "; "
                         }
                     }
-                } else {
-                    log.Warnf("Port %d is closed or filtered on %s", result.Port, target)
+                    table.Append([]string{
+                        strconv.Itoa(item.Port),
+                        item.Status,
+                        strings.TrimSuffix(cveStr, "; "),
+                    })
                 }
+                table.Render()
             }
         } else {
-          log.Infof("Starting web scan on %s...", target)
-          result := scanner.ScanWeb(target)
-          if result.Error == nil {
-              log.Infof("Web scan result for %s: %s", result.URL, result.Status)
-              for k, v := range result.Headers {
-                log.Infof("Header: %s: %s", k, v)
-              }
-              for _, vuln := range result.Vulnerabilities {
-                log.Warnf("Vulnerability: %s", vuln)
-             }
-          } else {
-              log.Warnf("Web scan failed: %v", result.Error)
-          }
-      }
+            log.Infof("Starting web scan on %s...", target)
+            result := scanner.ScanWeb(target)
+            type webOutput struct {
+                URL          string
+                Status       string
+                Headers      map[string]string
+                Vulnerabilities []string
+            }
+            output := webOutput{
+                URL:          result.URL,
+                Status:       result.Status,
+                Headers:      result.Headers,
+                Vulnerabilities: result.Vulnerabilities,
+            }
+            if format == "json" {
+                jsonData, _ := json.MarshalIndent(output, "", "  ")
+                os.Stdout.Write(jsonData)
+            } else {
+                table := tablewriter.NewWriter(os.Stdout)
+                // table.SetHeader(true)
+                table.Append([]string{"URL", "Status", "Vulnerabilities"})
+                vulnStr := strings.Join(result.Vulnerabilities, "; ")
+                table.Append([]string{result.URL, result.Status, vulnStr})
+                table.Render()
+                if len(result.Headers) > 0 {
+                    log.Info("Headers:")
+                    headerTable := tablewriter.NewWriter(os.Stdout)
+                    headerTable.Header([]string{"Header", "Value"})
+                    for k, v := range result.Headers {
+                        headerTable.Append([]string{k, v})
+                    }
+                    headerTable.Render()
+                }
+            }
+        }
     },
 }
 
@@ -81,4 +138,28 @@ func init() {
     rootCmd.AddCommand(scanCmd)
     scanCmd.Flags().StringP("type", "y", "network", "Scan type (network, web)")
     scanCmd.Flags().StringP("ports", "p", "22,80,443", "Ports to scan (e.g., 22,80,443)")
+    scanCmd.Flags().StringP("format", "f", "table", "Output format (table, json)")
 }
+
+// package cmd
+
+// import (
+//     "github.com/olekukonko/tablewriter"
+//     "github.com/spf13/cobra"
+//     "os"
+// )
+
+// var scanCmd = &cobra.Command{
+//     Use:   "scan",
+//     Short: "Test tablewriter",
+//     Run: func(cmd *cobra.Command, args []string) {
+//         table := tablewriter.NewWriter(os.Stdout)
+//         table.SetHeader([]string{"Test", "Value"})
+//         table.Append([]string{"Example", "OK"})
+//         table.Render()
+//     },
+// }
+
+// func init() {
+//     rootCmd.AddCommand(scanCmd)
+// }
