@@ -22,10 +22,10 @@ go build -o vulnscan ./cmd/vulnscan
 ./vulnscan scan --target example.com --type web --format json --output results.json
 
 Flags
---type (-y): Scan type (network or web, default: network)
---ports (-p): Ports to scan (e.g., 22,80,443, default: 22,80,443)
---format (-f): Output format (table or json, default: table)
---output (-o): Output file (.json or .csv, default: none)
+- --type (-y): Scan type (network or web, default: network)
+- --ports (-p): Ports to scan (e.g., 22,80,443, default: 22,80,443)
+- --format (-f): Output format (table or json, default: table)
+- --output (-o): Output file (.json or .csv, default: none)
 
 ## Development
 - Dependencies: cobra, logrus, tablewriter, gocsv.

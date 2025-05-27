@@ -1,0 +1,4 @@
+url: http://example.com
+status: 200 OK
+headers: 'Accept-Ranges: bytes; Etag: "84238dfc8092e5d9c0dac8ef93371a07:1736799080.121134"; Last-Modified: Mon, 13 Jan 2025 20:11:20 GMT; Vary: Accept-Encoding; Cache-Control: max-age=3487; Content-Type: text/html; Date: Tue, 27 May 2025 14:43:23 GMT; Connection: keep-alive'
+vulnerabilities: Missing X-Frame-Options header (clickjacking risk); Missing Content-Security-Policy header (XSS risk)

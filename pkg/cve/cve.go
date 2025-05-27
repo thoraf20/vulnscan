@@ -5,6 +5,7 @@ import (
     "net/http"
     "time"
     "github.com/sirupsen/logrus"
+    "strings"
 )
 
 type CVEResult struct {
@@ -17,12 +18,14 @@ func LookupCVE(service string) []CVEResult {
     log := logrus.New()
     log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-    if service == "unknown" {
-        log.Warnf("No CVE lookup for unknown service")
+    // Handle empty or unsupported services
+    service = strings.ToLower(strings.TrimSpace(service))
+    if service == "" || service == "unknown" || !isSupportedService(service) {
+        log.Warnf("Skipping CVE lookup for unsupported service: %s", service)
         return []CVEResult{{Error: nil}}
     }
 
-    url := "https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=" + service
+    url := "https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=" + service + "&keywordExactMatch"
     client := &http.Client{Timeout: 10 * time.Second}
     resp, err := client.Get(url)
     if err != nil {
@@ -62,4 +65,13 @@ func LookupCVE(service string) []CVEResult {
         log.Infof("Found %d CVEs for %s", len(results), service)
     }
     return results
+}
+
+func isSupportedService(service string) bool {
+    supported := map[string]bool{
+        "ssh":   true,
+        "http":  true,
+        "https": true,
+    }
+    return supported[service]
 }

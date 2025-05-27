@@ -8,6 +8,7 @@ import (
     "github.com/thoraf20/vulnscan/internal/config"
     "github.com/thoraf20/vulnscan/pkg/cve"
     "github.com/thoraf20/vulnscan/pkg/scanner"
+    "gopkg.in/yaml.v3"
     "os"
     "path/filepath"
     "strconv"
@@ -33,8 +34,8 @@ var scanCmd = &cobra.Command{
             return
         }
         format, err := cmd.Flags().GetString("format")
-        if err != nil || (format != "table" && format != "json") {
-            log.Error("Invalid format. Use 'table' or 'json'")
+        if err != nil || (format != "table" && format != "json" && format != "yaml") {
+            log.Error("Invalid format. Use 'table', 'json', or 'yaml'")
             cmd.Usage()
             return
         }
@@ -65,10 +66,10 @@ var scanCmd = &cobra.Command{
             }
             results := scanner.ScanTCPPorts(target, ports)
             type networkOutput struct {
-                Port    int    `csv:"Port"`
-                Status  string `csv:"Status"`
-                Service string `csv:"Service"`
-                CVEs    string `csv:"CVEs"`
+                Port    int    `csv:"Port" yaml:"port"`
+                Status  string `csv:"Status" yaml:"status"`
+                Service string `csv:"Service" yaml:"service"`
+                CVEs    string `csv:"CVEs" yaml:"cves"`
             }
             var output []networkOutput
             for _, result := range results {
@@ -97,7 +98,12 @@ var scanCmd = &cobra.Command{
                         log.Errorf("Failed to write JSON file: %v", err)
                         return
                     }
-                    log.Infof("Results saved to %s", outputFile)
+                } else if ext == ".yaml" || ext == ".yml" {
+                    yamlData, _ := yaml.Marshal(output)
+                    if err := os.WriteFile(outputFile, yamlData, 0644); err != nil {
+                        log.Errorf("Failed to write YAML file: %v", err)
+                        return
+                    }
                 } else if ext == ".csv" {
                     file, err := os.Create(outputFile)
                     if err != nil {
@@ -109,15 +115,18 @@ var scanCmd = &cobra.Command{
                         log.Errorf("Failed to write CSV file: %v", err)
                         return
                     }
-                    log.Infof("Results saved to %s", outputFile)
                 } else {
-                    log.Error("Output file must be .json or .csv")
+                    log.Error("Output file must be .json, .yaml, .yml, or .csv")
                     return
                 }
+                log.Infof("Results saved to %s", outputFile)
             }
             if format == "json" {
                 jsonData, _ := json.MarshalIndent(output, "", "  ")
                 os.Stdout.Write(jsonData)
+            } else if format == "yaml" {
+                yamlData, _ := yaml.Marshal(output)
+                os.Stdout.Write(yamlData)
             } else {
                 table := tablewriter.NewWriter(os.Stdout)
                 table.Header([]string{"Port", "Status", "Service", "CVEs"})
@@ -135,10 +144,10 @@ var scanCmd = &cobra.Command{
             log.Infof("Starting web scan on %s...", target)
             result := scanner.ScanWeb(target)
             type webOutput struct {
-                URL          string `csv:"URL"`
-                Status       string `csv:"Status"`
-                Headers      string `csv:"Headers"`
-                Vulnerabilities string `csv:"Vulnerabilities"`
+                URL             string `csv:"URL" yaml:"url"`
+                Status          string `csv:"Status" yaml:"status"`
+                Headers         string `csv:"Headers" yaml:"headers"`
+                Vulnerabilities string `csv:"Vulnerabilities" yaml:"vulnerabilities"`
             }
             headersStr := ""
             for k, v := range result.Headers {
@@ -146,9 +155,9 @@ var scanCmd = &cobra.Command{
             }
             headersStr = strings.TrimSuffix(headersStr, "; ")
             output := webOutput{
-                URL:          result.URL,
-                Status:       result.Status,
-                Headers:      headersStr,
+                URL:             result.URL,
+                Status:          result.Status,
+                Headers:         headersStr,
                 Vulnerabilities: strings.Join(result.Vulnerabilities, "; "),
             }
             if outputFile != "" {
@@ -159,7 +168,12 @@ var scanCmd = &cobra.Command{
                         log.Errorf("Failed to write JSON file: %v", err)
                         return
                     }
-                    log.Infof("Results saved to %s", outputFile)
+                } else if ext == ".yaml" || ext == ".yml" {
+                    yamlData, _ := yaml.Marshal(output)
+                    if err := os.WriteFile(outputFile, yamlData, 0644); err != nil {
+                        log.Errorf("Failed to write YAML file: %v", err)
+                        return
+                    }
                 } else if ext == ".csv" {
                     file, err := os.Create(outputFile)
                     if err != nil {
@@ -172,15 +186,18 @@ var scanCmd = &cobra.Command{
                         log.Errorf("Failed to write CSV file: %v", err)
                         return
                     }
-                    log.Infof("Results saved to %s", outputFile)
                 } else {
-                    log.Error("Output file must be .json or .csv")
+                    log.Error("Output file must be .json, .yaml, .yml, or .csv")
                     return
                 }
+                log.Infof("Results saved to %s", outputFile)
             }
             if format == "json" {
                 jsonData, _ := json.MarshalIndent(output, "", "  ")
                 os.Stdout.Write(jsonData)
+            } else if format == "yaml" {
+                yamlData, _ := yaml.Marshal(output)
+                os.Stdout.Write(yamlData)
             } else {
                 table := tablewriter.NewWriter(os.Stdout)
                 table.Header([]string{"URL", "Status", "Vulnerabilities"})
@@ -204,6 +221,6 @@ func init() {
     rootCmd.AddCommand(scanCmd)
     scanCmd.Flags().StringP("type", "y", "network", "Scan type (network, web)")
     scanCmd.Flags().StringP("ports", "p", "22,80,443", "Ports to scan (e.g., 22,80,443)")
-    scanCmd.Flags().StringP("format", "f", "table", "Output format (table, json)")
-    scanCmd.Flags().StringP("output", "o", "", "Output file (e.g., results.json or results.csv)")
+    scanCmd.Flags().StringP("format", "f", "table", "Output format (table, json, yaml)")
+    scanCmd.Flags().StringP("output", "o", "", "Output file (e.g., results.json, results.yaml, results.csv)")
 }
