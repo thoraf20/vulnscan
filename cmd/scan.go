@@ -1,18 +1,20 @@
 package cmd
 
 import (
-    "encoding/json"
-    "github.com/gocarina/gocsv"
-    "github.com/olekukonko/tablewriter"
-    "github.com/spf13/cobra"
-    "github.com/thoraf20/vulnscan/internal/config"
-    "github.com/thoraf20/vulnscan/pkg/cve"
-    "github.com/thoraf20/vulnscan/pkg/scanner"
-    "gopkg.in/yaml.v3"
-    "os"
-    "path/filepath"
-    "strconv"
-    "strings"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/gocarina/gocsv"
+	"github.com/olekukonko/tablewriter"
+	"github.com/spf13/cobra"
+	"github.com/thoraf20/vulnscan/internal/config"
+	"github.com/thoraf20/vulnscan/pkg/cve"
+	"github.com/thoraf20/vulnscan/pkg/scanner"
+	"gopkg.in/yaml.v3"
 )
 
 var log = config.InitLogger()
@@ -54,15 +56,11 @@ var scanCmd = &cobra.Command{
                 cmd.Usage()
                 return
             }
-            var ports []int
-            for _, p := range strings.Split(portsStr, ",") {
-                port, err := strconv.Atoi(strings.TrimSpace(p))
-                if err != nil || port < 1 || port > 65535 {
-                    log.Error("Invalid port range")
-                    cmd.Usage()
-                    return
-                }
-                ports = append(ports, port)
+            ports, err := parsePorts(portsStr)
+            if err != nil {
+                log.Errorf("Invalid port range: %v", err)
+                cmd.Usage()
+                return
             }
             results := scanner.ScanTCPPorts(target, ports)
             type networkOutput struct {
@@ -217,10 +215,54 @@ var scanCmd = &cobra.Command{
     },
 }
 
+func parsePorts(portsStr string) ([]int, error) {
+    var ports []int
+    seen := make(map[int]bool) // Avoid duplicates
+    parts := strings.Split(portsStr, ",")
+    for _, part := range parts {
+        part = strings.TrimSpace(part)
+        if strings.Contains(part, "-") {
+            // Handle range (e.g., 20-25)
+            rangeParts := strings.Split(part, "-")
+            if len(rangeParts) != 2 {
+                return nil, fmt.Errorf("invalid port range format: %s", part)
+            }
+            start, err := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
+            if err != nil {
+                return nil, fmt.Errorf("invalid start port: %s", rangeParts[0])
+            }
+            end, err := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
+            if err != nil {
+                return nil, fmt.Errorf("invalid end port: %s", rangeParts[1])
+            }
+            if start < 1 || end > 65535 || start > end {
+                return nil, fmt.Errorf("port range %d-%d out of valid range (1-65535)", start, end)
+            }
+            for p := start; p <= end; p++ {
+                if !seen[p] {
+                    ports = append(ports, p)
+                    seen[p] = true
+                }
+            }
+        } else {
+            // Handle single port
+            port, err := strconv.Atoi(part)
+            if err != nil || port < 1 || port > 65535 {
+                return nil, fmt.Errorf("invalid port: %s", part)
+            }
+            if !seen[port] {
+                ports = append(ports, port)
+                seen[port] = true
+            }
+        }
+    }
+    return ports, nil
+}
+
 func init() {
     rootCmd.AddCommand(scanCmd)
     scanCmd.Flags().StringP("type", "y", "network", "Scan type (network, web)")
-    scanCmd.Flags().StringP("ports", "p", "22,80,443", "Ports to scan (e.g., 22,80,443)")
+    scanCmd.Flags().StringP("ports", "p", "22,80,443", "Ports to scan (e.g., 22,80,443 or 20-25,80)")
     scanCmd.Flags().StringP("format", "f", "table", "Output format (table, json, yaml)")
     scanCmd.Flags().StringP("output", "o", "", "Output file (e.g., results.json, results.yaml, results.csv)")
 }
